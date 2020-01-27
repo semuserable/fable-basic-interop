@@ -10,5 +10,5 @@ Basic Fable interop: window.alert, Math.random, DOM, p5.js
 
 ## Building and running the app
 
-* Install JS dependencies: `npm install`
-* Go to root folder: `npm start`
+* `npm install`
+* `npm start`
