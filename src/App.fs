@@ -1,96 +1,84 @@
 module App
 
 open Fable.Core
+open System
+open P5
 
 JS.console.log "Hello from Fable!"
 
-(* window.alert *)
+type Grid = int array array
 
-// interface
-type Window =
-    // function description
-    abstract alert: ?message: string -> unit
+let make2DArray cols rows: Grid =
+    let arr = Array.create cols Array.empty
+    for i in 0 .. cols - 1 do
+        arr.[i] <- Array.zeroCreate rows
+    arr
 
-// wiring-up JavaScript and F# with [<Global>] and jsNative
-let [<Global>] window: Window = jsNative
+let width = 1500.
+let height = 1200.
+let resolution = 5.
+let cols = int (width / resolution)
+let rows = int (height / resolution)
+let mutable grid: Grid = make2DArray cols rows
 
-// client calls
-window.alert ("Global Fable window.alert")
-window.alert "Global Fable window.alert without parentheses"
+JS.console.log (string cols)
+JS.console.log (string rows)
 
-[<Emit("window.alert($0)")>]
-let alert (message: string): unit = jsNative
+// let replaceAtPos (x: Grid) col row newValue: Grid =
+//     [| for a in 0 .. (cols - 1) -> [| for b in 0 .. (rows - 1) -> if a = col && b = row then newValue else x.[a].[b] |] |]
 
-alert ("Emit from Fable window.alert")
-alert "Emit from Fable window.alert without parentheses"
-"Emit from Fable window.alert with F# style" |> alert 
+let rng = new Random()
+let randomCh = fun () -> rng.Next(2)
 
-(* Math.random *)
+let countNeighbors (grid: Grid) x y =
+    let mutable sum = 0
+    for i in -1 .. 1 do
+        for j in -1 .. 1 do
+            let col = (x + i + cols) % cols
+            let row = (y + j + rows) % rows
+            sum <- sum + grid.[col].[row]
 
-// interface
-type Math =
-    abstract random: unit -> float
+    sum <- sum - grid.[x].[y]
+    sum
 
-let [<Global>] Math: Math = jsNative
+let nextGrid (abc: Grid) (x: int) (y: int) state neighbors =
+    if state = 0 && neighbors = 3 then abc.[x].[y] <- 1
+    else if state = 1 && (neighbors < 2 || neighbors > 3) then abc.[x].[y] <- 0
+    else abc.[x].[y] <- state
 
-// client call
-JS.console.log (Math.random())
+let init () =
+    for i in 0 .. (cols - 1) do
+        for j in 0 .. (rows - 1) do
+            let rndValue = randomCh ()
+            grid.[i].[j] <- rndValue
 
-// emit
-[<Emit("Math.random()")>]
-let random(): float = jsNative
-
-JS.console.log (random())
-
-(* DOM *)
-
-// interfaces
-type Node =
-    abstract appendChild: child: Node -> Node
-    abstract insertBefore: node: Node * ?child: Node -> Node
-
-type Document =
-    abstract createElement: tagName: string -> Node
-    abstract createTextNode: data: string -> Node
-    abstract getElementById: elementId: string -> Node
-    abstract body: Node with get, set
-
-let [<Global>] document: Document = jsNative
-
-// client code
-let newDiv = document.createElement("div")
-
-"Good news everyone! Generated dynamically by Fable!"
-|> document.createTextNode
-|> newDiv.appendChild
-|> ignore
-
-let currentDiv = document.getElementById("app")
-document.body.insertBefore (newDiv, currentDiv) |> ignore
-
-(* p5.js *)
-// p5.js interface
-[<StringEnum>]
-type Renderer =
-    | [<CompiledName("p2d")>] P2D
-    | [<CompiledName("webgl")>] WebGL
-        
-type [<Import("*", "p5/lib/p5.js")>] p5(?sketch: p5 -> unit, ?id: string) =    
-    member __.setup with set(v: unit -> unit): unit = jsNative
-    member __.draw with set(v: unit -> unit): unit = jsNative
-    member __.createCanvas(w: float, h: float, ?renderer: Renderer): unit = jsNative
-    member __.background(value: int): unit = jsNative
-    member __.millis(): float = jsNative
-    member __.rotateX(angle: float): unit = jsNative
-    member __.box(): unit = jsNative
-
-// client code
 let sketch (it: p5) =
-    it.setup <- fun () -> it.createCanvas(300., 300., WebGL)
-    it.draw <- fun () ->
-        it.background(255)
-        it.rotateX(it.millis() / 1000.)
-        it.box()
+    it.setup <-
+        fun () ->
+            //it.frameRate (45)
+            it.createCanvas (width, height)
+            //it.noLoop ()
+            init ()
 
-// draw    
-p5(sketch) |> ignore
+    it.draw <-
+        fun () ->
+            it.background (0)
+            for i in 0 .. (cols - 1) do
+                for j in 0 .. (rows - 1) do
+                    let x = float i * resolution
+                    let y = float j * resolution
+                    if grid.[i].[j] = 1
+                    then it.rect (x, y, resolution - 1., resolution - 1.)
+
+            let next = make2DArray cols rows
+            for i in 0 .. (cols - 1) do
+                for j in 0 .. (rows - 1) do
+                    let neighbors = countNeighbors grid i j
+                    nextGrid next i j grid.[i].[j] neighbors
+
+            grid <- next
+
+    it.mousePressed <- fun o -> init ()
+
+// draw
+p5 (sketch) |> ignore
